@@ -9,5 +9,10 @@
             font-size: inherit;
             pointer-events: none;
         }
+
+        > div {
+            transform: translateY(calc(-1 * var(--subtitle-bump, 0rem)));
+            transition: transform 200ms;
+        }
     }
 }
