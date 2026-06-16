@@ -2,10 +2,11 @@
 
 const React = require('react');
 const { useTranslation } = require('react-i18next');
-const PropTypes = require('prop-types');
+const { useParams } = require('react-router');
+const { useSearchParams } = require('react-router-dom');
 const classnames = require('classnames');
 const { default: Icon } = require('@stremio/stremio-icons/react');
-const { useServices } = require('stremio/services');
+const { useCore } = require('stremio/core');
 const { CONSTANTS, useBinaryState, useOnScrollToBottom, withCoreSuspender } = require('stremio/common');
 const { AddonDetailsModal, Button, DelayedRenderer, Image, MainNavBars, MetaItem, MetaPreview, ModalDialog, MultiselectMenu } = require('stremio/components');
 const useDiscover = require('./useDiscover');
@@ -14,14 +15,26 @@ const styles = require('./styles');
 
 const SCROLL_TO_BOTTOM_THRESHOLD = 400;
 
-const Discover = ({ urlParams, queryParams }) => {
+const Discover = () => {
+    const { type, transportUrl, catalogId } = useParams();
+    const urlParams = React.useMemo(() => ({
+        type,
+        transportUrl,
+        catalogId
+    }), [type, transportUrl, catalogId]);
+    const [queryParams] = useSearchParams();
     const { t } = useTranslation();
-    const { core } = useServices();
+    const core = useCore();
     const [discover, loadNextPage] = useDiscover(urlParams, queryParams);
     const [selectInputs, hasNextPage] = useSelectableInputs(discover);
     const [inputsModalOpen, openInputsModal, closeInputsModal] = useBinaryState(false);
     const [addonModalOpen, openAddonModal, closeAddonModal] = useBinaryState(false);
     const [selectedMetaItemIndex, setSelectedMetaItemIndex] = React.useState(0);
+
+    const selectedMetaItem = React.useMemo(() => {
+        return discover.catalog?.content.type === 'Ready' &&
+            discover.catalog.content.content[selectedMetaItemIndex] || null;
+    }, [discover.catalog, selectedMetaItemIndex]);
 
     const metasContainerRef = React.useRef();
     const metaPreviewRef = React.useRef();
@@ -40,14 +53,6 @@ const Discover = ({ urlParams, queryParams }) => {
             }
         }
     }, [hasNextPage, loadNextPage]);
-    const selectedMetaItem = React.useMemo(() => {
-        return discover.catalog !== null &&
-            discover.catalog.content.type === 'Ready' &&
-            discover.catalog.content.content[selectedMetaItemIndex] ?
-            discover.catalog.content.content[selectedMetaItemIndex]
-            :
-            null;
-    }, [discover.catalog, selectedMetaItemIndex]);
     const addToLibrary = React.useCallback(() => {
         if (selectedMetaItem === null) {
             return;
@@ -71,6 +76,22 @@ const Discover = ({ urlParams, queryParams }) => {
             args: {
                 action: 'RemoveFromLibrary',
                 args: selectedMetaItem.id
+            }
+        });
+    }, [selectedMetaItem]);
+    const toggleWatched = React.useCallback(() => {
+        if (selectedMetaItem === null) {
+            return;
+        }
+
+        core.transport.dispatch({
+            action: 'Ctx',
+            args: {
+                action: 'MetaItemMarkAsWatched',
+                args: {
+                    meta_item: selectedMetaItem,
+                    is_watched: !selectedMetaItem.watched,
+                }
             }
         });
     }, [selectedMetaItem]);
@@ -193,6 +214,8 @@ const Discover = ({ urlParams, queryParams }) => {
                             trailerStreams={selectedMetaItem.trailerStreams}
                             inLibrary={selectedMetaItem.inLibrary}
                             toggleInLibrary={selectedMetaItem.inLibrary ? removeFromLibrary : addToLibrary}
+                            watched={selectedMetaItem.watched}
+                            toggleWatched={toggleWatched}
                             metaId={selectedMetaItem.id}
                             like={selectedMetaItem.like}
                         />
@@ -228,15 +251,6 @@ const Discover = ({ urlParams, queryParams }) => {
             }
         </MainNavBars>
     );
-};
-
-Discover.propTypes = {
-    urlParams: PropTypes.shape({
-        transportUrl: PropTypes.string,
-        type: PropTypes.string,
-        catalogId: PropTypes.string
-    }),
-    queryParams: PropTypes.instanceOf(URLSearchParams)
 };
 
 const DiscoverFallback = () => (
